@@ -6,6 +6,7 @@ from arrera_blue_lynx.pages.common.welcome import WelcomePage
 from arrera_blue_lynx.pages.common.wifi import WifiPage
 from arrera_blue_lynx.pages.home.user_account import HomeUserAccountPage
 from arrera_blue_lynx.pages.home.kernel import HomeKernelPage
+from arrera_blue_lynx.pages.home.office import HomeOfficePage
 
 
 def build_home_pages(window: LynxWindow, force_wifi: bool = False) -> list:
@@ -30,6 +31,11 @@ def build_home_pages(window: LynxWindow, force_wifi: bool = False) -> list:
             on_back=window.previous_page,
         ),
         HomeKernelPage(
+            state=window.state,
+            on_next=window.next_page,
+            on_back=window.previous_page,
+        ),
+        HomeOfficePage(
             state=window.state,
             on_next=window.next_page,
             on_back=window.previous_page,
