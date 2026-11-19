@@ -6,7 +6,8 @@ from arrera_blue_lynx.pages.common.welcome import WelcomePage
 from arrera_blue_lynx.pages.common.wifi import WifiPage
 from arrera_blue_lynx.pages.education.adult_account import EducationAdultAccountPage
 from arrera_blue_lynx.pages.education.child_account import EducationChildAccountPage
-
+from arrera_blue_lynx.pages.common.install import InstallPage
+from arrera_blue_lynx.pages.common.finish import FinishPage
 
 def build_education_pages(window: LynxWindow, force_wifi: bool = False) -> list:
     return [
@@ -33,6 +34,15 @@ def build_education_pages(window: LynxWindow, force_wifi: bool = False) -> list:
             state=window.state,
             on_next=window.next_page,
             on_back=window.previous_page,
+        ),
+        InstallPage(
+            state=window.state,
+            edition="education",
+            logo_filename="logo-education.png",
+            on_next=window.next_page,
+        ),
+        FinishPage(
+            on_finish=window.next_page,
         ),
     ]
 

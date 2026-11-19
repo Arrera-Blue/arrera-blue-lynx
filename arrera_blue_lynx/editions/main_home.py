@@ -7,7 +7,8 @@ from arrera_blue_lynx.pages.common.wifi import WifiPage
 from arrera_blue_lynx.pages.home.user_account import HomeUserAccountPage
 from arrera_blue_lynx.pages.home.kernel import HomeKernelPage
 from arrera_blue_lynx.pages.home.office import HomeOfficePage
-
+from arrera_blue_lynx.pages.common.install import InstallPage
+from arrera_blue_lynx.pages.common.finish import FinishPage
 
 def build_home_pages(window: LynxWindow, force_wifi: bool = False) -> list:
     return [
@@ -39,6 +40,15 @@ def build_home_pages(window: LynxWindow, force_wifi: bool = False) -> list:
             state=window.state,
             on_next=window.next_page,
             on_back=window.previous_page,
+        ),
+        InstallPage(
+            state=window.state,
+            edition="home",
+            logo_filename="logo-home.png",
+            on_next=window.next_page,
+        ),
+        FinishPage(
+            on_finish=window.next_page,
         ),
     ]
 
