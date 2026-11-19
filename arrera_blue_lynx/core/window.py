@@ -36,7 +36,6 @@ class LynxApp(Adw.Application):
         self._fullscreen = fullscreen
 
     def do_activate(self) -> None:
-        # Force le thème clair pour les écrans sur fond blanc
         Adw.StyleManager.get_default().set_color_scheme(Adw.ColorScheme.FORCE_LIGHT)
         load_css()
         win = LynxWindow(self, self._build_pages, fullscreen=self._fullscreen)
@@ -66,20 +65,37 @@ class LynxWindow(Adw.ApplicationWindow):
             self._stack.add_named(page, f"page-{idx}")
 
         if self._pages:
-            self._stack.set_visible_child_name("page-0")
+            self._show_page(0)
 
         if fullscreen:
             self.fullscreen()
 
+    def _should_skip(self, page: Gtk.Widget) -> bool:
+        skip_fn = getattr(page, "should_skip", None)
+        return bool(skip_fn()) if callable(skip_fn) else False
+
+    def _show_page(self, index: int) -> None:
+        self._current_index = index
+        self._stack.set_visible_child_name(f"page-{index}")
+        on_enter = getattr(self._pages[index], "on_enter", None)
+        if callable(on_enter):
+            on_enter()
+
     def next_page(self) -> None:
-        if self._current_index + 1 < len(self._pages):
-            self._current_index += 1
-            self._stack.set_visible_child_name(f"page-{self._current_index}")
+        idx = self._current_index + 1
+        while idx < len(self._pages) and self._should_skip(self._pages[idx]):
+            idx += 1
+
+        if idx < len(self._pages):
+            self._show_page(idx)
         else:
             print(f"Fin des pages — état collecté : {self.state}")
             self.close()
 
     def previous_page(self) -> None:
-        if self._current_index > 0:
-            self._current_index -= 1
-            self._stack.set_visible_child_name(f"page-{self._current_index}")
+        idx = self._current_index - 1
+        while idx >= 0 and self._should_skip(self._pages[idx]):
+            idx -= 1
+
+        if idx >= 0:
+            self._show_page(idx)

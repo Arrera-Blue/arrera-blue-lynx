@@ -107,3 +107,27 @@
 .setup-nav-back-btn:hover {
     background-color: #e6e6eb;
 }
+
+/* === Page Wi-Fi === */
+
+.wifi-status-label {
+    font-size: 10pt;
+    font-weight: 600;
+    color: #6e6e73;
+}
+
+.wifi-connected-badge {
+    font-size: 9.5pt;
+    font-weight: 600;
+    color: @accent_color;
+}
+
+.wifi-lock-icon {
+    color: #6e6e73;
+}
+
+.wifi-error-label {
+    font-size: 10.5pt;
+    font-weight: 500;
+    color: #c01c28;
+}
