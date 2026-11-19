@@ -1,0 +1,28 @@
+.welcome-title {
+    color: #ffffff;
+    font-size: 34pt;
+    font-weight: 700;
+    text-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+}
+
+.welcome-next-btn {
+    background-color: #ffffff;
+    background-image: none;
+    color: #111111;
+    border-radius: 9999px;
+    border: none;
+    min-width: 64px;
+    min-height: 64px;
+    padding: 0;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.28);
+    transition: all 150ms ease;
+}
+
+.welcome-next-btn:hover {
+    background-color: #f0f0f0;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.38);
+}
+
+.welcome-next-btn:active {
+    background-color: #e0e0e0;
+}
