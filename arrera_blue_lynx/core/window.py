@@ -7,6 +7,7 @@ gi.require_version("Adw", "1")
 from gi.repository import Adw, Gdk, Gtk
 
 from arrera_blue_lynx.core.paths import get_asset_path
+from arrera_blue_lynx.core.state import SetupState
 
 
 def load_css() -> None:
@@ -35,6 +36,8 @@ class LynxApp(Adw.Application):
         self._fullscreen = fullscreen
 
     def do_activate(self) -> None:
+        # Force le thème clair pour les écrans sur fond blanc
+        Adw.StyleManager.get_default().set_color_scheme(Adw.ColorScheme.FORCE_LIGHT)
         load_css()
         win = LynxWindow(self, self._build_pages, fullscreen=self._fullscreen)
         win.present()
@@ -49,6 +52,7 @@ class LynxWindow(Adw.ApplicationWindow):
     ) -> None:
         super().__init__(application=app, title="Arrera Blue Lynx")
         self.set_default_size(1280, 720)
+        self.state = SetupState()
 
         self._stack = Gtk.Stack()
         self._stack.set_transition_type(Gtk.StackTransitionType.SLIDE_LEFT_RIGHT)
@@ -72,7 +76,7 @@ class LynxWindow(Adw.ApplicationWindow):
             self._current_index += 1
             self._stack.set_visible_child_name(f"page-{self._current_index}")
         else:
-            print("Fin des pages (temporaire : fermeture de l'app)")
+            print(f"Fin des pages — état collecté : {self.state}")
             self.close()
 
     def previous_page(self) -> None:

@@ -1,6 +1,7 @@
 import sys
 
 from arrera_blue_lynx.core.window import LynxApp, LynxWindow
+from arrera_blue_lynx.pages.common.language import LanguagePage
 from arrera_blue_lynx.pages.common.welcome import WelcomePage
 
 
@@ -10,7 +11,10 @@ def build_education_pages(window: LynxWindow) -> list:
             logo_filename="logo-education.png",
             on_next=window.next_page,
         ),
-        # Les prochaines pages Education viendront ici
+        LanguagePage(
+            state=window.state,
+            on_next=window.next_page,
+        ),
     ]
 
 

@@ -26,3 +26,84 @@
 .welcome-next-btn:active {
     background-color: #e0e0e0;
 }
+
+/* === Pages communes sur fond blanc === */
+
+.setup-white-page {
+    background-color: #ffffff;
+    color: #1d1d1f;
+}
+
+.setup-header-icon {
+    color: #5e5c64;
+    margin-bottom: 4px;
+}
+
+.setup-title {
+    font-size: 26pt;
+    font-weight: 700;
+    color: #1d1d1f;
+}
+
+.setup-subtitle {
+    font-size: 11pt;
+    color: #6e6e73;
+}
+
+/* === Liste des langues (style GTK4 moderne) === */
+
+.language-scroll {
+    background-color: #fafafa;
+    border: 1px solid rgba(0, 0, 0, 0.10);
+    border-radius: 14px;
+}
+
+.language-list {
+    background-color: transparent;
+}
+
+.language-row {
+    border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+    transition: background-color 120ms ease;
+}
+
+.language-row:last-child {
+    border-bottom: none;
+}
+
+.language-row:hover {
+    background-color: rgba(0, 0, 0, 0.03);
+}
+
+.language-row:selected {
+    background-color: alpha(@accent_bg_color, 0.14);
+    color: @accent_color;
+}
+
+.language-row-label {
+    font-size: 12pt;
+    font-weight: 500;
+}
+
+.language-check-icon {
+    color: @accent_color;
+}
+
+/* === Boutons de navigation bas de page === */
+
+.setup-nav-next-btn,
+.setup-nav-back-btn {
+    min-width: 52px;
+    min-height: 52px;
+    padding: 0;
+}
+
+.setup-nav-back-btn {
+    background-color: #f2f2f5;
+    color: #1d1d1f;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.setup-nav-back-btn:hover {
+    background-color: #e6e6eb;
+}
