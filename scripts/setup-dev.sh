@@ -69,6 +69,12 @@ ALL_PKGS=(
 echo "==> Installation des dépendances pour Arrera Blue Lynx..."
 ${SUDO} dnf install -y "${ALL_PKGS[@]}"
 
+# Si le paquet cage est enregistré en base RPM mais que le binaire manque sur le disque
+if ! command -v cage >/dev/null 2>&1; then
+    echo "==> Binaire 'cage' absent malgré le paquet installé, réinstallation de cage..."
+    ${SUDO} dnf reinstall -y cage
+fi
+
 # Prépare l'arborescence ~/rpmbuild (idempotent) pour la création du RPM par la suite
 if [[ "${EUID}" -ne 0 ]] && command -v rpmdev-setuptree >/dev/null 2>&1; then
     echo "==> Initialisation de l'arborescence ~/rpmbuild..."
