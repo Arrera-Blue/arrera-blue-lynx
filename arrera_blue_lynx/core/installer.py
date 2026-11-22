@@ -67,14 +67,26 @@ EDU_FLATPAK_APPS: list[str] = [
 CLEANUP_SCRIPT_PATH = "/usr/local/sbin/arrera-cleanup-fedora-kernel.sh"
 CLEANUP_SERVICE_NAME = "arrera-cleanup-fedora-kernel.service"
 CLEANUP_SERVICE_PATH = f"/etc/systemd/system/{CLEANUP_SERVICE_NAME}"
+INSTALL_LOG_PATH = "/root/arrera-blue-lynx-install.log"
+CLEANUP_LOG_PATH = "/root/arrera-blue-lynx-kernel-cleanup.log"
 
 _CLEANUP_SCRIPT_CONTENT = f"""#!/usr/bin/env bash
 set -euo pipefail
 
+if [ -d /root ] && [ "$(id -u)" -eq 0 ]; then
+  touch {CLEANUP_LOG_PATH}
+  chmod 600 {CLEANUP_LOG_PATH}
+  exec > >(tee -a {CLEANUP_LOG_PATH}) 2>&1
+fi
+echo "=== [$(date -Iseconds)] Vérification nettoyage noyau Fedora ==="
+
 # Ne supprime le noyau Fedora que si le système a bien démarré sur CachyOS
 case "$(uname -r)" in
   *cachyos*) ;;
-  *) exit 0 ;;
+  *)
+    echo "Noyau actif ($(uname -r)) != cachyos, nettoyage ignoré."
+    exit 0
+    ;;
 esac
 
 FEDORA_PKGS=()
@@ -85,12 +97,14 @@ for pkg in kernel kernel-core kernel-modules kernel-modules-core kernel-modules-
 done
 
 if [ "${{#FEDORA_PKGS[@]}}" -gt 0 ]; then
+  echo "Suppression des paquets noyau Fedora : ${{FEDORA_PKGS[*]}}"
   abpm remove --dnf -y "${{FEDORA_PKGS[@]}}"
 fi
 
 systemctl disable {CLEANUP_SERVICE_NAME} >/dev/null 2>&1 || true
 rm -f {CLEANUP_SERVICE_PATH} {CLEANUP_SCRIPT_PATH}
 systemctl daemon-reload >/dev/null 2>&1 || true
+echo "=== [$(date -Iseconds)] Nettoyage terminé ==="
 """
 
 _CLEANUP_SERVICE_CONTENT = f"""[Unit]
@@ -141,19 +155,42 @@ def _build_user_commands(user: UserAccount) -> list[str]:
 def _build_base_system_commands(
     state: SetupState,
     *,
+    edition: str,
     locale_range: tuple[int, int],
     users_range: tuple[int, int],
+    log_to_root: bool = True,
 ) -> list[str]:
-    """Génère le socle commun : langue, création des comptes et mot de passe root."""
+    """Génère le socle commun : logs root, langue, création des comptes et mot de passe root."""
+    usernames = ", ".join(u.username for u in state.users) or "aucun"
     lines: list[str] = [
         "#!/usr/bin/env bash",
         "set -euo pipefail",
         "",
-        _emit_step(*locale_range, "Configuration de la langue du système"),
-        f"localectl set-locale LANG={shlex.quote(state.language)}",
-        "",
-        _emit_step(*users_range, "Création des comptes utilisateurs"),
     ]
+
+    if log_to_root:
+        lines.extend(
+            [
+                'if [ -d /root ] && [ "$(id -u)" -eq 0 ]; then',
+                f"  touch {INSTALL_LOG_PATH}",
+                f"  chmod 600 {INSTALL_LOG_PATH}",
+                f"  exec > >(tee -a {INSTALL_LOG_PATH}) 2>&1",
+                "fi",
+            ]
+        )
+
+    lines.extend(
+        [
+            'trap \'echo "[ERREUR] Commande échouée à la ligne ${LINENO} (code $?)"\' ERR',
+            f'echo "=== [$(date -Iseconds)] Début installation ({edition}) ==="',
+            f"echo {shlex.quote(f'Config: lang={state.language} | users=[{usernames}] | kernel={state.kernel} | office={state.office_suite}')}",
+            "",
+            _emit_step(*locale_range, "Configuration de la langue du système"),
+            f"localectl set-locale LANG={shlex.quote(state.language)}",
+            "",
+            _emit_step(*users_range, "Création des comptes utilisateurs"),
+        ]
+    )
 
     for user in state.users:
         lines.extend(_build_user_commands(user))
@@ -190,12 +227,14 @@ def _build_cachyos_commands() -> list[str]:
     ]
 
 
-def generate_home_install_script(state: SetupState) -> str:
+def generate_home_install_script(state: SetupState, *, log_to_root: bool = True) -> str:
     """Génère le script bash complet de configuration pour l'édition Home."""
     lines = _build_base_system_commands(
         state,
+        edition="home",
         locale_range=(5, 10),
         users_range=(10, 25),
+        log_to_root=log_to_root,
     )
 
     if state.kernel == "cachyos":
@@ -212,16 +251,25 @@ def generate_home_install_script(state: SetupState) -> str:
             ]
         )
 
-    lines.extend(["", _emit_step(100, 100, "Installation terminée"), ""])
+    lines.extend(
+        [
+            "",
+            'echo "=== [$(date -Iseconds)] Fin installation (home) ==="',
+            _emit_step(100, 100, "Installation terminée"),
+            "",
+        ]
+    )
     return "\n".join(lines)
 
 
-def generate_education_install_script(state: SetupState) -> str:
+def generate_education_install_script(state: SetupState, *, log_to_root: bool = True) -> str:
     """Génère le script bash complet de configuration pour l'édition Education."""
     lines = _build_base_system_commands(
         state,
+        edition="education",
         locale_range=(5, 10),
         users_range=(10, 20),
+        log_to_root=log_to_root,
     )
 
     dnf_cmd = ["abpm", "install", "--dnf", "--progress", *EDU_DNF_PACKAGES]
@@ -242,6 +290,7 @@ def generate_education_install_script(state: SetupState) -> str:
             _emit_step(65, 98, "Installation des applications Flathub Education"),
             " ".join(shlex.quote(arg) for arg in flatpak_cmd),
             "",
+            'echo "=== [$(date -Iseconds)] Fin installation (education) ==="',
             _emit_step(100, 100, "Installation terminée"),
             "",
         ]
@@ -291,6 +340,8 @@ def _run_install_script(
                         GLib.idle_add(on_progress, step_start / 100.0, current_msg)
                 elif line.startswith("PROGRESS:ERROR:"):
                     last_error = line.removeprefix("PROGRESS:ERROR:").strip()
+                elif line.startswith("[ERREUR]") and last_error is None:
+                    last_error = line
                 elif line.startswith("PROGRESS:"):
                     parts = line.split(":", 2)
                     if len(parts) == 3 and parts[1].isdigit():
