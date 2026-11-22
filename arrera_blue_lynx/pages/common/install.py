@@ -8,6 +8,7 @@ gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 from gi.repository import Adw, Gdk, GLib, Gtk
 
+from arrera_blue_lynx.core.installer import run_home_install
 from arrera_blue_lynx.core.paths import get_asset_path
 from arrera_blue_lynx.core.state import SetupState
 
@@ -188,14 +189,31 @@ class InstallPage(Gtk.Box):
         self._current_slide = index
 
     def on_enter(self) -> None:
-        """Démarre le diaporama et (en mode démo) l'animation de progression."""
         self._stop_timers()
+        self._status_label.remove_css_class("wifi-error-label")
         self._slide_timer_id = GLib.timeout_add_seconds(4, self._advance_slide)
+        self.set_progress(0.0, "Préparation de l'installation")
 
         if self._demo_mode:
             self._demo_percent = 0
-            self.set_progress(0.0, "Préparation de l'installation")
             self._demo_timer_id = GLib.timeout_add(90, self._demo_tick)
+            return
+
+        if self._edition == "home":
+            run_home_install(
+                self._state,
+                on_progress=self.set_progress,
+                on_success=self._on_install_success,
+                on_error=self._on_install_error,
+            )
+
+    def _on_install_success(self) -> None:
+        GLib.timeout_add(700, self._finish_once)
+
+    def _on_install_error(self, message: str) -> None:
+        self._stop_timers()
+        self._status_label.add_css_class("wifi-error-label")
+        self._status_label.set_label(f"Erreur : {message}")
 
     def _advance_slide(self) -> bool:
         if not self._slide_widgets:
