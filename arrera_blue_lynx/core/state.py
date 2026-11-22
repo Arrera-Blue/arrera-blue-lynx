@@ -31,5 +31,5 @@ class SetupState:
     wifi_ssid: str | None = None
     users: list[UserAccount] = field(default_factory=list)
     root_password: str | None = None
-    kernel: str = "fedora"  # "fedora", "lts" ou "cachyos"
+    kernel: str = "fedora"  # "fedora" ou "cachyos"
     office_suite: str | None = None  # "onlyoffice", "libreoffice" ou None

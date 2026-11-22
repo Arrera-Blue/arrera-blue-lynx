@@ -32,13 +32,6 @@ KERNEL_OPTIONS: list[KernelOption] = [
         is_default=True,
     ),
     KernelOption(
-        id="lts",
-        label="Noyau LTS",
-        tag="Long terme",
-        logo_stem="lts",
-        description="Noyau à support long terme — stabilité maximale et mises à jour conservatrices.",
-    ),
-    KernelOption(
         id="cachyos",
         label="Noyau CachyOS",
         tag="Performances",
@@ -168,13 +161,13 @@ class HomeKernelPage(Gtk.Box):
         title.set_halign(Gtk.Align.CENTER)
         outer.append(title)
 
-        # Zone centrale : 3 cartes + description du noyau sélectionné
+        # Zone centrale : 2 cartes + description du noyau sélectionné
         center = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=28)
         center.set_vexpand(True)
         center.set_valign(Gtk.Align.CENTER)
         center.set_halign(Gtk.Align.CENTER)
 
-        cards_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=36)
+        cards_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=48)
         cards_row.set_halign(Gtk.Align.CENTER)
         cards_row.set_homogeneous(True)
 
