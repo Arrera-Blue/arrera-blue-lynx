@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "arrera-blue-lynx"
+version = "2026.1.0"
+description = "Interface de premier démarrage pour la distribution Linux Arrera Blue"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "GPL-3.0-or-later"
+
+[project.scripts]
+arrera-blue-lynx-home = "arrera_blue_lynx.editions.main_home:main"
+arrera-blue-lynx-education = "arrera_blue_lynx.editions.main_education:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["arrera_blue_lynx*"]

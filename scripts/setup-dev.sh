@@ -55,6 +55,7 @@ RPM_PKGS=(
     rpm-build
     rpmdevtools
     rpmlint
+    python3-devel
     pyproject-rpm-macros
     systemd-rpm-macros
 )
