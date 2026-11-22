@@ -11,6 +11,8 @@ from gi.repository import GLib
 from arrera_blue_lynx.core.state import SetupState, UserAccount
 
 CACHYOS_COPR = "bieszczaders/kernel-cachyos"
+EDU_COPR = "arrera-software/education-suite"
+EDU_COPR_REPO_ID = "copr:copr.fedorainfracloud.org:arrera-software:education-suite"
 
 OFFICE_COMMANDS: dict[str, tuple[str, list[str]]] = {
     "libreoffice": (
@@ -22,6 +24,45 @@ OFFICE_COMMANDS: dict[str, tuple[str, list[str]]] = {
         ["abpm", "install", "--flatpak", "--progress", "org.onlyoffice.desktopeditors"],
     ),
 }
+
+EDU_DNF_PACKAGES: list[str] = [
+    # Fedora
+    "gcompris-qt",
+    "klettres",
+    "ktuberling",
+    "stellarium",
+    "goldendict",
+    "minetest",
+    "audacity",
+    "vlc",
+    "openshot",
+    "pinta",
+    "gimp",
+    # RPM-Sphere
+    "pysycache",
+    "webapp-manager",
+    # Copr arrera-software/education-suite
+    "achats",
+    "alacampagne",
+    "eduactiv8",
+    "jclic",
+    "numberrace",
+    "webapp-sugarizer",
+    "webapp-calculatice",
+    "webapp-blockly-games",
+    "webapp-leconjugueur",
+]
+
+EDU_FLATPAK_APPS: list[str] = [
+    "org.tuxpaint.Tuxpaint",
+    "com.tux4kids.tuxmath",
+    "lol.siembra.tuxtypeplus",
+    "edu.mit.Scratch",
+    "org.geogebra.GeoGebra",
+    "ch.openboard.OpenBoard",
+    "com.github.xournalpp.xournalpp",
+    "org.onlyoffice.desktopeditors",
+]
 
 CLEANUP_SCRIPT_PATH = "/usr/local/sbin/arrera-cleanup-fedora-kernel.sh"
 CLEANUP_SERVICE_NAME = "arrera-cleanup-fedora-kernel.service"
@@ -97,6 +138,34 @@ def _build_user_commands(user: UserAccount) -> list[str]:
     return lines
 
 
+def _build_base_system_commands(
+    state: SetupState,
+    *,
+    locale_range: tuple[int, int],
+    users_range: tuple[int, int],
+) -> list[str]:
+    """Génère le socle commun : langue, création des comptes et mot de passe root."""
+    lines: list[str] = [
+        "#!/usr/bin/env bash",
+        "set -euo pipefail",
+        "",
+        _emit_step(*locale_range, "Configuration de la langue du système"),
+        f"localectl set-locale LANG={shlex.quote(state.language)}",
+        "",
+        _emit_step(*users_range, "Création des comptes utilisateurs"),
+    ]
+
+    for user in state.users:
+        lines.extend(_build_user_commands(user))
+
+    if state.root_password:
+        lines.append(
+            f"printf 'root:%s\\n' {shlex.quote(state.root_password)} | chpasswd"
+        )
+
+    return lines
+
+
 def _build_cachyos_commands() -> list[str]:
     """Installe le noyau CachyOS et planifie la suppression du noyau Fedora au reboot suivant."""
     return [
@@ -123,23 +192,11 @@ def _build_cachyos_commands() -> list[str]:
 
 def generate_home_install_script(state: SetupState) -> str:
     """Génère le script bash complet de configuration pour l'édition Home."""
-    lines: list[str] = [
-        "#!/usr/bin/env bash",
-        "set -euo pipefail",
-        "",
-        _emit_step(5, 10, "Configuration de la langue du système"),
-        f"localectl set-locale LANG={shlex.quote(state.language)}",
-        "",
-        _emit_step(10, 25, "Création des comptes utilisateurs"),
-    ]
-
-    for user in state.users:
-        lines.extend(_build_user_commands(user))
-
-    if state.root_password:
-        lines.append(
-            f"printf 'root:%s\\n' {shlex.quote(state.root_password)} | chpasswd"
-        )
+    lines = _build_base_system_commands(
+        state,
+        locale_range=(5, 10),
+        users_range=(10, 25),
+    )
 
     if state.kernel == "cachyos":
         lines.extend(_build_cachyos_commands())
@@ -155,8 +212,35 @@ def generate_home_install_script(state: SetupState) -> str:
             ]
         )
 
+    lines.extend(["", _emit_step(100, 100, "Installation terminée"), ""])
+    return "\n".join(lines)
+
+
+def generate_education_install_script(state: SetupState) -> str:
+    """Génère le script bash complet de configuration pour l'édition Education."""
+    lines = _build_base_system_commands(
+        state,
+        locale_range=(5, 10),
+        users_range=(10, 20),
+    )
+
+    dnf_cmd = ["abpm", "install", "--dnf", "--progress", *EDU_DNF_PACKAGES]
+    flatpak_cmd = ["abpm", "install", "--flatpak", "--progress", *EDU_FLATPAK_APPS]
+
     lines.extend(
         [
+            "",
+            _emit_step(20, 28, "Activation du dépôt Education Suite"),
+            f"if [ ! -f {shlex.quote(f'/etc/yum.repos.d/_{EDU_COPR_REPO_ID}.repo')} ]; then",
+            f"  abpm repo add {shlex.quote(EDU_COPR)}",
+            "fi",
+            "abpm clean expire-cache",
+            "",
+            _emit_step(28, 65, "Installation des logiciels système Education"),
+            " ".join(shlex.quote(arg) for arg in dnf_cmd),
+            "",
+            _emit_step(65, 98, "Installation des applications Flathub Education"),
+            " ".join(shlex.quote(arg) for arg in flatpak_cmd),
             "",
             _emit_step(100, 100, "Installation terminée"),
             "",
@@ -165,14 +249,13 @@ def generate_home_install_script(state: SetupState) -> str:
     return "\n".join(lines)
 
 
-def run_home_install(
-    state: SetupState,
+def _run_install_script(
+    script_content: str,
     on_progress: Callable[[float, str], None],
     on_success: Callable[[], None],
     on_error: Callable[[str], None],
 ) -> None:
-    """Exécute le script généré en arrière-plan et remonte la progression à l'UI GTK."""
-    script_content = generate_home_install_script(state)
+    """Exécute un script généré en arrière-plan et remonte la progression à l'UI GTK."""
 
     def worker() -> None:
         fd, raw_path = tempfile.mkstemp(prefix="arrera-lynx-install-", suffix=".sh")
@@ -228,3 +311,33 @@ def run_home_install(
             script_path.unlink(missing_ok=True)
 
     threading.Thread(target=worker, daemon=True).start()
+
+
+def run_home_install(
+    state: SetupState,
+    on_progress: Callable[[float, str], None],
+    on_success: Callable[[], None],
+    on_error: Callable[[str], None],
+) -> None:
+    """Lance le script d'installation pour l'édition Home."""
+    _run_install_script(
+        generate_home_install_script(state),
+        on_progress=on_progress,
+        on_success=on_success,
+        on_error=on_error,
+    )
+
+
+def run_education_install(
+    state: SetupState,
+    on_progress: Callable[[float, str], None],
+    on_success: Callable[[], None],
+    on_error: Callable[[str], None],
+) -> None:
+    """Lance le script d'installation pour l'édition Education."""
+    _run_install_script(
+        generate_education_install_script(state),
+        on_progress=on_progress,
+        on_success=on_success,
+        on_error=on_error,
+    )

@@ -8,7 +8,7 @@ gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 from gi.repository import Adw, Gdk, GLib, Gtk
 
-from arrera_blue_lynx.core.installer import run_home_install
+from arrera_blue_lynx.core.installer import run_education_install, run_home_install
 from arrera_blue_lynx.core.paths import get_asset_path
 from arrera_blue_lynx.core.state import SetupState
 
@@ -201,6 +201,13 @@ class InstallPage(Gtk.Box):
 
         if self._edition == "home":
             run_home_install(
+                self._state,
+                on_progress=self.set_progress,
+                on_success=self._on_install_success,
+                on_error=self._on_install_error,
+            )
+        elif self._edition == "education":
+            run_education_install(
                 self._state,
                 on_progress=self.set_progress,
                 on_success=self._on_install_success,
