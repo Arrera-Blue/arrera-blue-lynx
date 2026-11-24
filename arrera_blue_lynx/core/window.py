@@ -4,7 +4,7 @@ import gi
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
-from gi.repository import Adw, Gdk, Gtk
+from gi.repository import Adw, Gdk, GLib, Gtk
 
 from arrera_blue_lynx.core.paths import get_asset_path
 from arrera_blue_lynx.core.state import SetupState
@@ -68,7 +68,14 @@ class LynxWindow(Adw.ApplicationWindow):
             self._show_page(0)
 
         if fullscreen:
+            # Différer l'appel fullscreen après le commit Wayland initial pour éviter
+            # le crash Cage / wlroots : Assertion `surface->initialized' failed.
+            self.connect("map", lambda _w: GLib.timeout_add(150, self._deferred_fullscreen))
+
+    def _deferred_fullscreen(self) -> bool:
+        if self.get_mapped():
             self.fullscreen()
+        return False
 
     def _should_skip(self, page: Gtk.Widget) -> bool:
         skip_fn = getattr(page, "should_skip", None)

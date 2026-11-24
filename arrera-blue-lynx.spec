@@ -1,6 +1,6 @@
 Name:           arrera-blue-lynx
 Version:        2026.1.0
-Release:        1%{?dist}
+Release:        2%{?dist}
 Summary:        Interface de premier démarrage pour Arrera Blue OS
 
 License:        GPL-3.0-or-later
@@ -52,5 +52,8 @@ cp -a assets/. %{buildroot}%{_datadir}/arrera-blue-lynx/assets/
 %{_datadir}/arrera-blue-lynx
 
 %changelog
+* Tue Nov 24 2026 Arrera Software <contact@arrera.org> - 2026.1.0-2
+- Différer l'activation du mode plein écran après le premier commit Wayland pour éviter le crash Cage/wlroots (Assertion 'surface->initialized' failed)
+
 * Sun Nov 22 2026 Arrera Software <contact@arrera.org> - 2026.1.0-1
 - Premier packaging RPM pour Arrera Blue Lynx (éditions Home et Education)
