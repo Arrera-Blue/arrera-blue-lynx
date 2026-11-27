@@ -34,11 +34,13 @@ def build_education_pages(
             state=window.state,
             on_next=window.next_page,
             on_back=window.previous_page,
+            check_system_users=not demo_mode,
         ),
         EducationChildAccountPage(
             state=window.state,
             on_next=window.next_page,
             on_back=window.previous_page,
+            check_system_users=not demo_mode,
         ),
         InstallPage(
             state=window.state,

@@ -17,6 +17,8 @@ class EducationAdultAccountPage(Gtk.Box):
         state: SetupState,
         on_next: Callable[[], None],
         on_back: Callable[[], None] | None = None,
+        *,
+        check_system_users: bool = True,
     ) -> None:
         super().__init__(orientation=Gtk.Orientation.VERTICAL)
         self._state = state
@@ -53,7 +55,7 @@ class EducationAdultAccountPage(Gtk.Box):
         center_box.set_vexpand(True)
         center_box.set_valign(Gtk.Align.CENTER)
 
-        self._form = AccountForm()
+        self._form = AccountForm(check_system_users=check_system_users)
         center_box.append(self._form)
         outer.append(center_box)
 

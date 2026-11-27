@@ -11,6 +11,7 @@ from gi.repository import GLib
 from arrera_blue_lynx.core.state import SetupState, UserAccount
 
 CACHYOS_COPR = "bieszczaders/kernel-cachyos"
+CACHYOS_COPR_REPO_ID = "copr:copr.fedorainfracloud.org:bieszczaders:kernel-cachyos"
 EDU_COPR = "arrera-software/education-suite"
 EDU_COPR_REPO_ID = "copr:copr.fedorainfracloud.org:arrera-software:education-suite"
 
@@ -81,10 +82,11 @@ fi
 echo "=== [$(date -Iseconds)] Vérification nettoyage noyau Fedora ==="
 
 # Ne supprime le noyau Fedora que si le système a bien démarré sur CachyOS
-case "$(uname -r)" in
+KVER="$(uname -r)"
+case "${{KVER}}" in
   *cachyos*) ;;
   *)
-    echo "Noyau actif ($(uname -r)) != cachyos, nettoyage ignoré."
+    echo "Noyau actif (${{KVER}}) != cachyos, nettoyage ignoré."
     exit 0
     ;;
 esac
@@ -99,6 +101,24 @@ done
 if [ "${{#FEDORA_PKGS[@]}}" -gt 0 ]; then
   echo "Suppression des paquets noyau Fedora : ${{FEDORA_PKGS[*]}}"
   abpm remove --dnf -y "${{FEDORA_PKGS[@]}}"
+fi
+
+if [ -f "/boot/vmlinuz-${{KVER}}" ]; then
+  for rescue_vmlinuz in /boot/vmlinuz-0-rescue-*; do
+    [ -e "${{rescue_vmlinuz}}" ] || continue
+    cp -f "/boot/vmlinuz-${{KVER}}" "${{rescue_vmlinuz}}"
+  done
+fi
+
+if [ -f "/boot/initramfs-${{KVER}}.img" ]; then
+  for rescue_initramfs in /boot/initramfs-0-rescue-*.img; do
+    [ -e "${{rescue_initramfs}}" ] || continue
+    cp -f "/boot/initramfs-${{KVER}}.img" "${{rescue_initramfs}}"
+  done
+fi
+
+if [ -f /boot/grub2/grub.cfg ] && command -v grub2-mkconfig >/dev/null 2>&1; then
+  grub2-mkconfig -o /boot/grub2/grub.cfg
 fi
 
 systemctl disable {CLEANUP_SERVICE_NAME} >/dev/null 2>&1 || true
@@ -165,6 +185,7 @@ def _build_base_system_commands(
     lines: list[str] = [
         "#!/usr/bin/env bash",
         "set -euo pipefail",
+        'trap \'case "$0" in /tmp/arrera-lynx-*.sh) rm -f -- "$0" ;; esac\' EXIT',
         "",
     ]
 
@@ -203,21 +224,60 @@ def _build_base_system_commands(
     return lines
 
 
+def _build_system_update_commands(update_range: tuple[int, int]) -> list[str]:
+    """Met à jour le système et les applications via abpm si Internet est disponible."""
+    return [
+        "",
+        _emit_step(*update_range, "Mise à jour du système via abpm"),
+        'if ip route show default 2>/dev/null | grep -q . || nmcli -t -f CONNECTIVITY general 2>/dev/null | grep -qiE "^(full|limited|portal)$"; then',
+        "  abpm clean expire-cache || true",
+        "  abpm update -y --progress || true",
+        "else",
+        '  echo "Pas de connexion réseau active — mise à jour système ignorée."',
+        "fi",
+    ]
+
+
+def _build_office_commands(state: SetupState, office_range: tuple[int, int]) -> list[str]:
+    office_entry = OFFICE_COMMANDS.get(state.office_suite or "")
+    if office_entry is None:
+        return []
+    label, office_cmd = office_entry
+    return [
+        "",
+        _emit_step(*office_range, f"Installation de {label}"),
+        " ".join(shlex.quote(arg) for arg in office_cmd),
+    ]
+
+
 def _build_cachyos_commands() -> list[str]:
     """Installe le noyau CachyOS et planifie la suppression du noyau Fedora au reboot suivant."""
     return [
         "",
-        _emit_step(25, 35, "Ajout du dépôt CachyOS"),
-        f"abpm repo add {shlex.quote(CACHYOS_COPR)}",
+        _emit_step(40, 48, "Ajout du dépôt CachyOS"),
+        f"if [ ! -f {shlex.quote(f'/etc/yum.repos.d/_{CACHYOS_COPR_REPO_ID}.repo')} ]; then",
+        f"  abpm repo add {shlex.quote(CACHYOS_COPR)}",
+        "fi",
         "abpm clean expire-cache",
-        _emit_step(35, 65, "Installation du noyau CachyOS"),
+        _emit_step(48, 68, "Installation du noyau CachyOS"),
         "abpm install --dnf --progress kernel-cachyos kernel-cachyos-devel-matched",
         # Nécessaire avec SELinux en mode enforcing pour le chargement des modules CachyOS
         "if command -v setsebool >/dev/null 2>&1; then setsebool -P domain_kernel_load_modules on || true; fi",
-        _emit_step(65, 72, "Configuration du démarrage sur CachyOS"),
-        'CACHYOS_VMLINUZ=$(ls -1 /boot/vmlinuz-*cachyos* 2>/dev/null | sort -V | tail -n 1 || true)',
-        'if [ -n "${CACHYOS_VMLINUZ}" ] && command -v grubby >/dev/null 2>&1; then',
-        '  grubby --set-default="${CACHYOS_VMLINUZ}"',
+        _emit_step(68, 75, "Configuration du démarrage sur CachyOS"),
+        'CACHYOS_KVER=$(ls -1 /usr/lib/modules 2>/dev/null | grep \'cachyos\' | sort -V | tail -n 1 || true)',
+        'if [ -n "${CACHYOS_KVER}" ]; then',
+        '  if [ ! -f "/boot/vmlinuz-${CACHYOS_KVER}" ] && [ -f "/usr/lib/modules/${CACHYOS_KVER}/vmlinuz" ]; then',
+        '    cp -f "/usr/lib/modules/${CACHYOS_KVER}/vmlinuz" "/boot/vmlinuz-${CACHYOS_KVER}"',
+        "  fi",
+        '  if [ ! -f "/boot/initramfs-${CACHYOS_KVER}.img" ] && command -v dracut >/dev/null 2>&1; then',
+        '    dracut -f --hostonly --no-hostonly-cmdline --add plymouth --kver "${CACHYOS_KVER}" "/boot/initramfs-${CACHYOS_KVER}.img"',
+        "  fi",
+        "  if [ -f /boot/grub2/grub.cfg ] && command -v grub2-mkconfig >/dev/null 2>&1; then",
+        "    grub2-mkconfig -o /boot/grub2/grub.cfg",
+        "  fi",
+        '  if [ -f "/boot/vmlinuz-${CACHYOS_KVER}" ] && command -v grubby >/dev/null 2>&1; then',
+        '    grubby --set-default="/boot/vmlinuz-${CACHYOS_KVER}" || true',
+        "  fi",
         "fi",
         "mkdir -p /usr/local/sbin /etc/systemd/system",
         f"cat <<'EOF_CLEANUP_SCRIPT' > {CLEANUP_SCRIPT_PATH}\n{_CLEANUP_SCRIPT_CONTENT.rstrip()}\nEOF_CLEANUP_SCRIPT",
@@ -233,28 +293,40 @@ def generate_home_install_script(state: SetupState, *, log_to_root: bool = True)
         state,
         edition="home",
         locale_range=(5, 10),
-        users_range=(10, 25),
+        users_range=(10, 20),
         log_to_root=log_to_root,
     )
+    lines.extend(_build_system_update_commands((20, 40)))
 
     if state.kernel == "cachyos":
         lines.extend(_build_cachyos_commands())
 
-    office_entry = OFFICE_COMMANDS.get(state.office_suite or "")
-    if office_entry is not None:
-        label, office_cmd = office_entry
-        lines.extend(
-            [
-                "",
-                _emit_step(72, 98, f"Installation de {label}"),
-                " ".join(shlex.quote(arg) for arg in office_cmd),
-            ]
-        )
-
+    lines.extend(_build_office_commands(state, (75, 98)))
     lines.extend(
         [
             "",
             'echo "=== [$(date -Iseconds)] Fin installation (home) ==="',
+            _emit_step(100, 100, "Installation terminée"),
+            "",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def generate_enterprise_install_script(state: SetupState, *, log_to_root: bool = True) -> str:
+    """Génère le script bash complet de configuration pour l'édition Enterprise."""
+    lines = _build_base_system_commands(
+        state,
+        edition="enterprise",
+        locale_range=(5, 10),
+        users_range=(10, 30),
+        log_to_root=log_to_root,
+    )
+    lines.extend(_build_system_update_commands((30, 98)))
+    lines.extend(
+        [
+            "",
+            'echo "=== [$(date -Iseconds)] Fin installation (enterprise) ==="',
             _emit_step(100, 100, "Installation terminée"),
             "",
         ]
@@ -268,9 +340,10 @@ def generate_education_install_script(state: SetupState, *, log_to_root: bool = 
         state,
         edition="education",
         locale_range=(5, 10),
-        users_range=(10, 20),
+        users_range=(10, 18),
         log_to_root=log_to_root,
     )
+    lines.extend(_build_system_update_commands((18, 35)))
 
     dnf_cmd = ["abpm", "install", "--dnf", "--progress", *EDU_DNF_PACKAGES]
     flatpak_cmd = ["abpm", "install", "--flatpak", "--progress", *EDU_FLATPAK_APPS]
@@ -278,16 +351,16 @@ def generate_education_install_script(state: SetupState, *, log_to_root: bool = 
     lines.extend(
         [
             "",
-            _emit_step(20, 28, "Activation du dépôt Education Suite"),
+            _emit_step(35, 40, "Activation du dépôt Education Suite"),
             f"if [ ! -f {shlex.quote(f'/etc/yum.repos.d/_{EDU_COPR_REPO_ID}.repo')} ]; then",
             f"  abpm repo add {shlex.quote(EDU_COPR)}",
             "fi",
             "abpm clean expire-cache",
             "",
-            _emit_step(28, 65, "Installation des logiciels système Education"),
+            _emit_step(40, 70, "Installation des logiciels système Education"),
             " ".join(shlex.quote(arg) for arg in dnf_cmd),
             "",
-            _emit_step(65, 98, "Installation des applications Flathub Education"),
+            _emit_step(70, 98, "Installation des applications Flathub Education"),
             " ".join(shlex.quote(arg) for arg in flatpak_cmd),
             "",
             'echo "=== [$(date -Iseconds)] Fin installation (education) ==="',
@@ -341,7 +414,7 @@ def _run_install_script(
                 elif line.startswith("PROGRESS:ERROR:"):
                     last_error = line.removeprefix("PROGRESS:ERROR:").strip()
                 elif line.startswith("[ERREUR]") and last_error is None:
-                    last_error = line
+                    last_error = line.removeprefix("[ERREUR]").strip()
                 elif line.startswith("PROGRESS:"):
                     parts = line.split(":", 2)
                     if len(parts) == 3 and parts[1].isdigit():
@@ -373,6 +446,21 @@ def run_home_install(
     """Lance le script d'installation pour l'édition Home."""
     _run_install_script(
         generate_home_install_script(state),
+        on_progress=on_progress,
+        on_success=on_success,
+        on_error=on_error,
+    )
+
+
+def run_enterprise_install(
+    state: SetupState,
+    on_progress: Callable[[float, str], None],
+    on_success: Callable[[], None],
+    on_error: Callable[[str], None],
+) -> None:
+    """Lance le script d'installation pour l'édition Enterprise."""
+    _run_install_script(
+        generate_enterprise_install_script(state),
         on_progress=on_progress,
         on_success=on_success,
         on_error=on_error,

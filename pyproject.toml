@@ -13,6 +13,8 @@ license = "GPL-3.0-or-later"
 [project.scripts]
 arrera-blue-lynx-home = "arrera_blue_lynx.editions.main_home:main"
 arrera-blue-lynx-education = "arrera_blue_lynx.editions.main_education:main"
+arrera-blue-lynx-enterprise = "arrera_blue_lynx.editions.main_enterprise:main"
+arrera-blue-lynx-server = "arrera_blue_lynx.editions.main_server:main"
 
 [tool.setuptools.packages.find]
 where = ["."]

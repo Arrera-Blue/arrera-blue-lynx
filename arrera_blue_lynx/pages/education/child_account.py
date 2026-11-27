@@ -17,6 +17,8 @@ class EducationChildAccountPage(Gtk.Box):
         state: SetupState,
         on_next: Callable[[], None],
         on_back: Callable[[], None] | None = None,
+        *,
+        check_system_users: bool = True,
     ) -> None:
         super().__init__(orientation=Gtk.Orientation.VERTICAL)
         self._state = state
@@ -61,7 +63,7 @@ class EducationChildAccountPage(Gtk.Box):
         center_box.set_vexpand(True)
         center_box.set_valign(Gtk.Align.CENTER)
 
-        self._form = AccountForm()
+        self._form = AccountForm(check_system_users=check_system_users)
 
         age_labels = ["Catégorie d'âge", *(label for _code, label in CHILD_PROFILES)]
         self._age_dropdown = Gtk.DropDown(model=Gtk.StringList.new(age_labels))

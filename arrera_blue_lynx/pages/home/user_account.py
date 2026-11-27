@@ -10,18 +10,23 @@ from arrera_blue_lynx.pages.common.account_form import AccountForm
 
 
 class HomeUserAccountPage(Gtk.Box):
-    """Page de création de l'utilisateur pour l'édition Home (+ Root)."""
+    """Page de création de l'utilisateur pour les éditions Home et Enterprise (+ Root)."""
 
     def __init__(
         self,
         state: SetupState,
         on_next: Callable[[], None],
         on_back: Callable[[], None] | None = None,
+        *,
+        require_root: bool = False,
+        check_system_users: bool = True,
     ) -> None:
         super().__init__(orientation=Gtk.Orientation.VERTICAL)
         self._state = state
         self._on_next = on_next
         self._on_back = on_back
+        self._require_root = require_root
+        self._check_system_users = check_system_users
 
         self.add_css_class("setup-white-page")
         self.set_hexpand(True)
@@ -46,7 +51,7 @@ class HomeUserAccountPage(Gtk.Box):
         scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
         scrolled.set_vexpand(True)
 
-        self._form = AccountForm()
+        self._form = AccountForm(check_system_users=self._check_system_users)
 
         # Case Administrateur (cochée par défaut, toujours modifiable)
         self._admin_check = Gtk.CheckButton(label="Faire de ce compte un compte administrateur")
@@ -55,8 +60,13 @@ class HomeUserAccountPage(Gtk.Box):
         self._admin_check.connect("toggled", self._on_admin_toggled)
         self._form.append_extra_widget(self._admin_check)
 
-        # Section Root (optionnelle si admin coché, obligatoire sinon)
-        self._root_label = Gtk.Label(label="Compte super administrateur (Root) — optionnel")
+        # Section Root (obligatoire si require_root=True ou si admin décoché, optionnelle sinon)
+        initial_root_label = (
+            "Compte super administrateur (Root) — obligatoire"
+            if self._require_root
+            else "Compte super administrateur (Root) — optionnel"
+        )
+        self._root_label = Gtk.Label(label=initial_root_label)
         self._root_label.set_xalign(0.0)
         self._root_label.add_css_class("account-section-label")
         self._form.append_extra_widget(self._root_label)
@@ -102,10 +112,10 @@ class HomeUserAccountPage(Gtk.Box):
 
     def _on_admin_toggled(self, check: Gtk.CheckButton) -> None:
         self._form.clear_error()
-        if check.get_active():
-            self._root_label.set_label("Compte super administrateur (Root) — optionnel")
-        else:
+        if self._require_root or not check.get_active():
             self._root_label.set_label("Compte super administrateur (Root) — obligatoire")
+        else:
+            self._root_label.set_label("Compte super administrateur (Root) — optionnel")
 
     def _submit(self) -> None:
         is_admin = self._admin_check.get_active()
@@ -116,7 +126,10 @@ class HomeUserAccountPage(Gtk.Box):
         root_pwd = self._root_password_entry.get_text()
         root_confirm = self._root_confirm_entry.get_text()
 
-        # Root obligatoire si l'utilisateur n'est pas admin ; optionnel sinon mais validé si rempli
+        # Root obligatoire si require_root=True ou si l'utilisateur n'est pas admin ; optionnel sinon
+        if self._require_root and not root_pwd:
+            self._form.show_error("Le mot de passe du compte Root est obligatoire.")
+            return
         if not is_admin and not root_pwd:
             self._form.show_error(
                 "Le mot de passe du compte Root est obligatoire si l'utilisateur n'est pas administrateur."

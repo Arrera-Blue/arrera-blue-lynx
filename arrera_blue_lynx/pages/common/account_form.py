@@ -1,7 +1,5 @@
 from collections.abc import Callable
 from pathlib import Path
-import re
-import unicodedata
 
 import gi
 
@@ -10,20 +8,18 @@ gi.require_version("Adw", "1")
 from gi.repository import Adw, Gdk, GLib, Gtk
 
 from arrera_blue_lynx.core.paths import DEV_ASSETS_DIR, SYS_ASSETS_DIR
-from arrera_blue_lynx.core.state import UserAccount
+from arrera_blue_lynx.core.state import (
+    RESERVED_USERNAMES,
+    USERNAME_RE,
+    UserAccount,
+    slugify_username,
+    validate_password,
+    validate_username,
+)
 
-USERNAME_RE = re.compile(r"^[a-z_][a-z0-9_-]{0,31}$")
-RESERVED_USERNAMES = {"root", "daemon", "bin", "sys", "nobody", "arrera-setup"}
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".svg"}
 
-
-def _slugify_username(text: str) -> str:
-    """Transforme un prénom/nom en identifiant Linux valide (minuscules ASCII)."""
-    normalized = unicodedata.normalize("NFKD", text)
-    ascii_text = normalized.encode("ascii", "ignore").decode("ascii").lower()
-    cleaned = re.sub(r"[^a-z0-9_-]+", "", ascii_text)
-    cleaned = re.sub(r"^[^a-z_]+", "", cleaned)
-    return cleaned[:32]
+__all__ = ["RESERVED_USERNAMES", "USERNAME_RE", "AccountForm", "list_available_avatars"]
 
 
 def list_available_avatars() -> list[Path]:
@@ -40,19 +36,28 @@ def list_available_avatars() -> list[Path]:
         if not directory.is_dir():
             continue
         for path in sorted(directory.iterdir()):
-            if path.is_file() and path.suffix.lower() in IMAGE_EXTENSIONS:
-                if path.name not in seen_names:
-                    seen_names.add(path.name)
-                    found.append(path)
+            if (
+                path.is_file()
+                and path.suffix.lower() in IMAGE_EXTENSIONS
+                and path.name not in seen_names
+            ):
+                seen_names.add(path.name)
+                found.append(path)
     return found
 
 
 class AccountForm(Gtk.Box):
     """Formulaire de création de compte réutilisable (Home, Education Adulte & Enfant)."""
 
-    def __init__(self, on_change: Callable[[], None] | None = None) -> None:
+    def __init__(
+        self,
+        on_change: Callable[[], None] | None = None,
+        *,
+        check_system_users: bool = True,
+    ) -> None:
         super().__init__(orientation=Gtk.Orientation.HORIZONTAL, spacing=48)
         self._on_change = on_change
+        self._check_system_users = check_system_users
         self._avatar_path: str | None = None
         self._username_manually_edited = False
         self._updating_username = False
@@ -223,7 +228,7 @@ class AccountForm(Gtk.Box):
         self._avatar.set_text(full_name)
 
         if not self._username_manually_edited:
-            suggested = _slugify_username(first or last)
+            suggested = slugify_username(first or last)
             self._updating_username = True
             self._username_entry.set_text(suggested)
             self._updating_username = False
@@ -287,27 +292,18 @@ class AccountForm(Gtk.Box):
             self.show_error("Veuillez renseigner le nom et le prénom.")
             return None
 
-        if not username or not USERNAME_RE.match(username):
-            self.show_error(
-                "Identifiant invalide : utilisez uniquement des minuscules, chiffres, '-' ou '_' "
-                "(sans espaces ni accents)."
-            )
+        username_err = validate_username(
+            username,
+            existing_usernames=existing_usernames,
+            check_system=self._check_system_users,
+        )
+        if username_err is not None:
+            self.show_error(username_err)
             return None
 
-        if username in RESERVED_USERNAMES:
-            self.show_error(f"L'identifiant « {username} » est réservé par le système.")
-            return None
-
-        if existing_usernames and username in existing_usernames:
-            self.show_error(f"L'identifiant « {username} » est déjà utilisé par un autre compte.")
-            return None
-
-        if len(password) < 4:
-            self.show_error("Le mot de passe doit contenir au moins 4 caractères.")
-            return None
-
-        if password != confirm:
-            self.show_error("Les deux mots de passe ne correspondent pas.")
+        password_err = validate_password(password, confirm)
+        if password_err is not None:
+            self.show_error(password_err)
             return None
 
         self.clear_error()

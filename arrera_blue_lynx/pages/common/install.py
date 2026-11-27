@@ -8,7 +8,11 @@ gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 from gi.repository import Adw, Gdk, GLib, Gtk
 
-from arrera_blue_lynx.core.installer import run_education_install, run_home_install
+from arrera_blue_lynx.core.installer import (
+    run_education_install,
+    run_enterprise_install,
+    run_home_install,
+)
 from arrera_blue_lynx.core.paths import get_asset_path
 from arrera_blue_lynx.core.state import SetupState
 
@@ -38,6 +42,25 @@ def _build_slides(edition: str, logo_filename: str) -> list[_SlideData]:
                 title="Prêt dans quelques instants",
                 body="Arrera Blue configure automatiquement vos préférences et vos outils éducatifs.",
                 icon_name="emblem-system-symbolic",
+            ),
+        ]
+
+    if edition == "enterprise":
+        return [
+            _SlideData(
+                title="Bienvenue dans Arrera Blue Enterprise",
+                body="Un poste de travail fiable, sécurisé et prêt pour votre activité professionnelle.",
+                logo_filename=logo_filename,
+            ),
+            _SlideData(
+                title="Configuré selon vos besoins",
+                body="Votre langue, vos comptes et la mise à jour du système sont en cours de mise en place.",
+                icon_name="preferences-system-symbolic",
+            ),
+            _SlideData(
+                title="Prêt dans quelques instants",
+                body="Nous finalisons la mise à jour du système pour un environnement opérationnel.",
+                icon_name="emblem-ok-symbolic",
             ),
         ]
 
@@ -206,6 +229,13 @@ class InstallPage(Gtk.Box):
                 on_success=self._on_install_success,
                 on_error=self._on_install_error,
             )
+        elif self._edition == "enterprise":
+            run_enterprise_install(
+                self._state,
+                on_progress=self.set_progress,
+                on_success=self._on_install_success,
+                on_error=self._on_install_error,
+            )
         elif self._edition == "education":
             run_education_install(
                 self._state,
@@ -220,7 +250,9 @@ class InstallPage(Gtk.Box):
     def _on_install_error(self, message: str) -> None:
         self._stop_timers()
         self._status_label.add_css_class("wifi-error-label")
-        self._status_label.set_label(f"Erreur : {message}")
+        self._status_label.set_label(
+            f"Erreur : {message} (détails dans /root/arrera-blue-lynx-install.log)"
+        )
 
     def _advance_slide(self) -> bool:
         if not self._slide_widgets:
@@ -235,12 +267,16 @@ class InstallPage(Gtk.Box):
         if percent < 45:
             return "Création des comptes utilisateurs"
         if percent < 75:
+            if self._edition == "enterprise":
+                return "Mise à jour du système via abpm"
             if self._edition == "home" and self._state.office_suite:
                 return f"Installation des logiciels en cours ({self._state.office_suite})"
             return "Installation des logiciels en cours"
         if percent < 95:
             if self._edition == "home":
                 return f"Configuration du noyau ({self._state.kernel})"
+            if self._edition == "enterprise":
+                return "Finalisation de la mise à jour système"
             return "Configuration des profils Education"
         return "Finalisation de la configuration"
 

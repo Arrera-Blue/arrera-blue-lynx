@@ -35,6 +35,7 @@ def build_home_pages(
             state=window.state,
             on_next=window.next_page,
             on_back=window.previous_page,
+            check_system_users=not demo_mode,
         ),
         HomeKernelPage(
             state=window.state,

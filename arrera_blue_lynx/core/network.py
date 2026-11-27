@@ -1,6 +1,6 @@
-from dataclasses import dataclass
 import os
 import subprocess
+from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
@@ -140,11 +140,11 @@ def list_wifi_networks(rescan: bool = True) -> list[WifiNetwork]:
         )
 
         existing = by_ssid.get(ssid)
-        if existing is None:
-            by_ssid[ssid] = candidate
-        elif candidate.in_use and not existing.in_use:
-            by_ssid[ssid] = candidate
-        elif candidate.in_use == existing.in_use and candidate.signal > existing.signal:
+        if (
+            existing is None
+            or (candidate.in_use and not existing.in_use)
+            or (candidate.in_use == existing.in_use and candidate.signal > existing.signal)
+        ):
             by_ssid[ssid] = candidate
 
     return sorted(by_ssid.values(), key=lambda net: (not net.in_use, -net.signal, net.ssid.lower()))
@@ -170,3 +170,69 @@ def connect_wifi(ssid: str, password: str | None = None) -> tuple[bool, str]:
     if "Secrets were required" in err or "password" in err.lower():
         return False, "Mot de passe incorrect ou refusé par le réseau."
     return False, err or "Impossible de se connecter au réseau Wi-Fi."
+
+
+def has_wifi_device() -> bool:
+    """Retourne True si une interface Wi-Fi est présente sur la machine."""
+    try:
+        res = _run_nmcli(["-t", "-f", "TYPE", "device", "status"], timeout=5)
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    if res.returncode != 0:
+        return False
+    return any(line.strip() == "wifi" for line in res.stdout.splitlines())
+
+
+def has_internet_connectivity() -> bool:
+    """Retourne True si une connexion réseau active (Ethernet ou Wi-Fi) est disponible."""
+    try:
+        conn = _run_nmcli(["-t", "-f", "CONNECTIVITY", "general"], timeout=5)
+        connectivity = conn.stdout.strip().lower()
+        if connectivity == "full":
+            return True
+        if connectivity == "none":
+            return False
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+
+    try:
+        res = _run_nmcli(["-t", "-f", "DEVICE,TYPE,STATE", "device", "status"], timeout=5)
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    if res.returncode != 0:
+        return False
+
+    for line in res.stdout.splitlines():
+        parts = line.split(":")
+        if len(parts) >= 3 and parts[1] in {"ethernet", "wifi"} and parts[2] == "connected":
+            dev = parts[0]
+            try:
+                ip_res = _run_nmcli(["-g", "IP4.ADDRESS", "device", "show", dev], timeout=5)
+                gw_res = _run_nmcli(["-g", "IP4.GATEWAY", "device", "show", dev], timeout=5)
+                if ip_res.stdout.strip() and gw_res.stdout.strip():
+                    return True
+            except (OSError, subprocess.TimeoutExpired):
+                continue
+    return False
+
+
+def get_local_ip() -> str | None:
+    """Retourne la première adresse IPv4 active (hors loopback), ou None."""
+    try:
+        res = _run_nmcli(["-t", "-f", "DEVICE,TYPE,STATE", "device", "status"], timeout=5)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if res.returncode != 0:
+        return None
+
+    for line in res.stdout.splitlines():
+        parts = line.split(":")
+        if len(parts) >= 3 and parts[1] in {"ethernet", "wifi"} and parts[2] == "connected":
+            try:
+                ip_res = _run_nmcli(["-g", "IP4.ADDRESS", "device", "show", parts[0]], timeout=5)
+                raw = ip_res.stdout.strip().splitlines()
+                if raw:
+                    return raw[0].split("/")[0].strip()
+            except (OSError, subprocess.TimeoutExpired):
+                continue
+    return None
